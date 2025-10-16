@@ -1,0 +1,185 @@
+---
+format:
+  html:
+    embed-resources: true
+---
+
+# Import Data
+
+```{python}
+import pandas as pd
+xmas = pd.read_csv("https://www.dropbox.com/scl/fi/qxaslqqp5p08i1650rpc4/xmas.csv?rlkey=erdxi7jbh7pqf9fh4lv4cayp5&dl=1")
+xmas.head()
+```
+
+# Function 1: pluralize_gift()
+
+First Attempt (not vectored)
+
+```{python}
+def pluralize_gift(gift):
+  """
+  Returns plural of a noun
+  
+  Parameters
+  ----------
+  gift: str
+    A noun
+    
+  Return
+  ------
+  str
+    Plural version
+  """
+
+  if "oo" in gift:
+    gift = gift.replace("oo","ee")
+  elif gift[-1] == "y":
+    gift = gift.replace("y","ies")
+  else:
+    gift = gift + "s"
+
+  return gift
+```
+
+Test #1
+
+```{python}
+# Should work
+pluralize_gift("goose")
+
+# Will work if your function is vectorized! 
+# pluralize_gift(xmas['Gift.Item'])
+```
+
+Vectorized Fuction (Just for fun!)
+
+```{python}
+import numpy as np
+import pandas as pd
+
+def pluralize_gift_vec(s):
+  s = pd.Series(s, dtype="string")
+  c1 = s.str.contains("oo")
+  c2 = s.str.endswith("y")
+  out = s + "s"
+  out[c1] = s[c1].str.replace("oo","ee")
+  out[c2] = s[c2].str.replace("y","ies")
+  
+  
+  return out
+```
+
+Test #2
+
+```{python}
+# Should work
+pluralize_gift_vec("goose")
+
+# Will work if your function is vectorized! 
+pluralize_gift_vec(xmas['Gift.Item'])
+```
+cardinal number words
+number_words = {
+    1: 'one', 2: 'two', 3: 'three', 4: 'four
+# Function 2: make_phrase()
+
+```{python}
+import pandas as pd
+
+def make_phrase(num, num_word, item, verb, adjective, location):
+    """
+     <documentation here>
+
+    """
+    
+    # Step 1: get rid of nas and put in blanks
+    if pd.isna(verb):
+        verb = ""
+    if pd.isna(adjective):
+        adjective = ""
+    if pd.isna(location):
+        location = ""
+    
+    # Step 2: If day > 1 plurizlise
+    if num > 1:
+        item = pluralize_gift(item)
+    
+    # Step 3: Check if it starts with a vowel
+    vowels = ['a', 'e', 'i', 'o', 'u']
+    starts_with_vowel = item[0].lower() in vowels
+    
+    # Step 4: For day 1 figure out which one to use "a" or "an"
+    if num == 1:
+        if starts_with_vowel:
+            num_word = "an"
+        else:
+            num_word = "a"
+    
+    # Step 5 combine 
+    parts = [num_word, adjective, item, verb, location]
+    non_empty_parts = [part for part in parts if part]
+    phrase = ' '.join(non_empty_parts)
+    
+    return phrase
+```
+
+Test 
+```{python}
+make_phrase(10, "ten", "lord", "a-leaping", "", "")
+```
+
+Test 
+```{python}
+make_phrase(5, "five", "ring", "", "golden", "")
+```
+
+## Function 3: sing_day()
+
+```{python}
+def sing_day(dataset, num, phrase_col):
+    """
+    <documentation>
+    """
+    
+    # Step 1: Setup the intro line
+    ordinal_words = {
+        1: 'first', 2: 'second', 3: 'third', 4: 'fourth', 5: 'fifth', 6: 'sixth',
+        7: 'seventh', 8: 'eighth', 9: 'ninth', 10: 'tenth', 11: 'eleventh', 12: 'twelfth'
+    }
+    num_word = ordinal_words[num]
+    intro = "On the " + num_word + " day of Christmas, my true love sent to me:"
+    
+    # Step 2: Sing the gift phrases
+    gifts = ""
+    for i in range(num, 0, -1):
+        gift_phrase = dataset[dataset['Day'] == i][phrase_col].values[0]
+        if i == 1 and num > 1:
+            gifts = gifts + "and " + gift_phrase
+        else:
+            gifts = gifts + gift_phrase
+        if i > 1:
+            gifts = gifts + "\n"
+    
+    # Step 3: Put it all together and return
+    song = intro + "\n" + gifts + "."
+    
+    return song
+```
+
+Test df
+```{python}
+xmas = pd.DataFrame({
+    'Day': [1, 2, 3],
+    'Full.Phrase': [
+        'a partridge in a pear tree',
+        'two turtle doves',
+        'three french hens'
+    ]
+})
+```
+
+Test
+```{python}
+sing_day(xmas, 2, 'Full.Phrase')
+```
