@@ -1,0 +1,107 @@
+---
+title: "Ames Housing Price Prediction"
+author: "Matthew Spink"
+format: 
+  dashboard:
+    embed-resources: true
+---
+
+```{python}
+import pandas as pd
+import plotly.express as px
+
+train = pd.read_csv(r"C:\Users\spink\OneDrive\Desktop\Machine Learning\Data\train_new.csv")
+
+num_cols = ['Lot Area', 'Overall Qual', 'Year Built', 'Full Bath', 'TotRms AbvGrd', 'Gr Liv Area']
+correlations = train[num_cols + ['SalePrice']].corr()['SalePrice'].drop('SalePrice').sort_values(ascending=False)
+neighborhood_prices = train.groupby('Neighborhood')['SalePrice'].median().sort_values(ascending=True).tail(8)
+```
+
+## Row
+
+```{python}
+#| content: valuebox
+#| title: "Final RMSE"
+dict(
+    icon = "bullseye",
+    color = "warning",
+    value = "0.148"
+)
+```
+
+```{python}
+#| content: valuebox
+#| title: "Training Samples"
+dict(
+    icon = "houses",
+    color = "primary",
+    value = len(train)
+)
+```
+
+```{python}
+#| content: valuebox
+#| title: "Avg Sale Price"
+dict(
+    icon = "currency-dollar",
+    color = "success",
+    value = "$182K"
+)
+```
+
+## Row {height=45%}
+
+### Column {width=50%}
+
+```{python}
+#| title: Top Price Drivers
+fig = px.bar(x=correlations.values, y=correlations.index, orientation='h')
+fig.update_layout(xaxis_title="Correlation", yaxis_title="", margin=dict(t=20, b=20))
+fig.show()
+```
+
+### Column {width=50%}
+
+```{python}
+#| title: Price by Neighborhood
+fig = px.bar(x=neighborhood_prices.values, y=neighborhood_prices.index, orientation='h')
+fig.update_layout(
+    xaxis_title="Median Price ($)", 
+    yaxis_title="", 
+    margin=dict(t=20, b=20, l=80, r=20)
+)
+fig.show()
+```
+
+## Row {height=35%}
+
+### Column {width=50%}
+
+```{python}
+#| title: Model Comparison
+results = pd.DataFrame({
+    'Model': ['Ridge', 'Lasso', 'ElasticNet'],
+    'Parameters': ['alpha=10', 'alpha=0.0001', 'alpha=0.001, l1=0.2'],
+    'CV RMSE': ['0.1488', '0.1488', '0.1483']
+})
+results
+```
+
+### Column {width=50%}
+
+::: {.card}
+#### Key Insights
+
+**Price Drivers**
+
+Quality and living area were the biggest drivers, no suprise.
+
+**Neighborhoods**
+
+Neinborhoods have significatn price diffrences, with incremental changes.
+
+**Model Choice**
+
+Elastic net was the best which could mean lots of multicollinearity.
+
+:::

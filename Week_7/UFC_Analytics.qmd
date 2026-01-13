@@ -1,0 +1,144 @@
+---
+title: "UFC Project"
+format: html
+    embed-resources: true
+---
+
+## Import
+```{python}
+import pandas as pd 
+
+df = pd.read_csv("C:/Users/spink/OneDrive/Desktop/UFC/ufc-master.csv")
+df.head()
+```
+
+```{python}
+df.describe()
+```
+
+```{python}
+df.info()
+```
+
+```{python}
+df.columns
+```
+
+```{python}
+df.isnull().sum()
+```
+
+## Create Target Variable 
+```{python}
+df['RedWins'] = (df['Winner'] == 'Red').astype(int)
+```
+
+```{python}
+df['RedWins'].head()
+```
+
+## Clean data 
+
+```{python}
+pd.set_option('display.max_rows', None)
+```
+```{python}
+df.isnull().sum()
+```
+
+# Droping coloms with high NA percentages, most of them have to do with rankings which are arbiatray and likley dont have a significant effect on outcomes
+```{python}
+drop_cols = ['EmptyArena', 'BMatchWCRank', 'RMatchWCRank', 
+             'RWFlyweightRank', 'RWFeatherweightRank', 'RWStrawweightRank',
+             'RWBantamweightRank', 'RHeavyweightRank', 'RLightHeavyweightRank',
+             'RMiddleweightRank', 'RWelterweightRank', 'RLightweightRank',
+             'RFeatherweightRank', 'RBantamweightRank', 'RFlyweightRank',
+             'RPFPRank', 'BWFlyweightRank', 'BWFeatherweightRank',
+             'BWStrawweightRank', 'BWBantamweightRank', 'BHeavyweightRank',
+             'BLightHeavyweightRank', 'BMiddleweightRank', 'BWelterweightRank',
+             'BLightweightRank', 'BFeatherweightRank', 'BBantamweightRank',
+             'BFlyweightRank', 'BPFPRank', 'FinishDetails']
+df = df.drop(columns = drop_cols)
+```
+
+# Drop the rows with NA's in coloms with low NA percentages 
+```{python}
+df = df.dropna(subset=['RedOdds', 'BlueOdds', 'RedExpectedValue', 'BlueExpectedValue'])
+```
+
+```{python}
+df['RedOdds'].isnull().sum()
+```
+
+# Some coloms dealing wtih fighter stats have NA values because the fighter is new in the UFC
+# Making a flag colom to identify new fighters, then subing thier stats with the median value
+# Use median because mean is vunerable to outliers and 0 is an outlier itself 
+
+```{python}
+blue_stat_cols = ['BlueAvgSigStrLanded', 'BlueAvgSigStrPct', 'BlueAvgSubAtt', 
+                  'BlueAvgTDLanded', 'BlueAvgTDPct']
+
+red_stat_cols = ['RedAvgSigStrLanded', 'RedAvgSigStrPct', 'RedAvgSubAtt', 
+                 'RedAvgTDLanded', 'RedAvgTDPct']
+```
+
+```{python}
+df['BlueIsDebut'] = df['BlueAvgSigStrLanded'].isnull().astype(int)
+
+df['RedIsDebut'] = df['RedAvgSigStrLanded'].isnull().astype(int)
+```
+
+```{python}
+for col in blue_stat_cols:
+    df[col] = df[col].fillna(df[col].median())
+```
+
+```{python}
+for col in red_stat_cols:
+    df[col] = df[col].fillna(df[col].median())
+```
+
+```{python}
+df[blue_stat_cols].isnull().sum()
+df[red_stat_cols].isnull().sum()
+```
+
+```{python}
+#shows how many new fighters there are 
+df[['BlueIsDebut', 'RedIsDebut']].sum()
+```
+
+# fill in the three missing stance vlaue with orthodox, no big deal 
+```{python}
+df['BlueStance'].isnull().sum()
+```
+
+```{python}
+most_common_stance = df['BlueStance'].mode()[0]
+
+df['BlueStance'] = df['BlueStance'].fillna(most_common_stance)
+```
+
+# drop specific information about how the fight was won or lost 
+# predicting just the winner is less difficulut allbeit lower reward than predicting method of win or which round 
+# also easy call to deal with the NA's in these coloms 
+
+```{python}
+drop_cols = ['Finish', 'FinishRound', 
+             'FinishRoundTime', 'TotalFightTimeSecs', 
+             'RedDecOdds', 'BlueDecOdds',
+             'RSubOdds', 'BSubOdds', 'RKOOdds', 'BKOOdds']
+
+df = df.drop(columns = drop_cols)
+```
+
+# here we can see we got rid of all the NA's!
+```{python}
+df.isnull().sum()
+```
+
+# Simple Models 
+
+```{python}
+
+```

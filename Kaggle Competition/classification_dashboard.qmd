@@ -1,0 +1,101 @@
+---
+title: "Political Affiliation Classification"
+author: "Matthew Spink"
+format: 
+  dashboard:
+    embed-resources: true
+---
+
+```{python}
+import pandas as pd
+import plotly.express as px
+
+train = pd.read_csv(r"C:\Users\spink\OneDrive\Desktop\Machine Learning\Data\gsb-544-fall-2025-classification (1)\CAH-201803-train.csv")
+party_counts = train['political_affiliation'].value_counts()
+ideology_counts = train['Q4'].value_counts()
+```
+
+## Row
+
+```{python}
+#| content: valuebox
+#| title: "Final Accuracy"
+dict(
+    icon = "bullseye",
+    color = "success",
+    value = "60.2%"
+)
+```
+
+```{python}
+#| content: valuebox
+#| title: "Training Samples"
+dict(
+    icon = "people",
+    color = "primary",
+    value = len(train)
+)
+```
+
+```{python}
+#| content: valuebox
+#| title: "Classes"
+dict(
+    icon = "diagram-3",
+    color = "info",
+    value = 3
+)
+```
+
+## Row
+
+### Column {width=50%}
+
+```{python}
+#| title: Target Distribution
+fig = px.pie(values=party_counts.values, names=party_counts.index)
+fig.update_layout(margin=dict(t=20, b=20, l=20, r=20))
+fig.show()
+```
+
+### Column {width=50%}
+
+```{python}
+#| title: Political Ideology (Q4)
+fig = px.bar(x=ideology_counts.index, y=ideology_counts.values)
+fig.update_layout(xaxis_title="", yaxis_title="Count", margin=dict(t=20, b=20))
+fig.show()
+```
+
+## Row
+
+### Column {width=50%}
+
+```{python}
+#| title: Model Comparison
+results = pd.DataFrame({
+    'Model': ['SVC', 'LDA', 'Logistic Regression'],
+    'Parameters': ['kernel=linear', 'default', 'C=1'],
+    'CV Accuracy': ['59.2%', '59.8%', '62.1%']
+})
+results
+```
+
+### Column {width=50%}
+
+::: {.card}
+#### Key Insights
+
+**Class Distribution**
+
+Distribution is pretty even.
+
+**Ideology**
+
+Most people are Moderates, and there are more conservatives than liberals.
+
+**Model Choice**
+
+Logistic Regression was the best, data was likley linear, normaly distributed, and low dimensional.
+
+:::
