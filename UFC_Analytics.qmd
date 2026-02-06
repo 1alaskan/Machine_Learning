@@ -1,0 +1,601 @@
+---
+title: "UFC Project"
+format: 
+  html:
+    embed-resources: true
+---
+## Steps
+1: Find Data 
+2  Import 
+3: Clean 
+4: Dummify
+5: Column Transformer
+6: Logistic Regression
+7: LASSO 
+8: Random Forest 
+9: XGBoost
+10: Update varaiables for a specific bout 
+11: Predict the outcome with the best model   
+
+# Workflow for models 
+1. Import model package
+2. Make pipeline
+3. Tune hyperparameters
+4. Find best hyperparameter
+5. Make df of more influencial coefficants 
+6. use cross validation to find metrics 
+7. make a confusion matrix and classifcation report 
+
+
+## Import
+```{python}
+import pandas as pd 
+
+from sklearn.model_selection._search import GridSearchCV
+df = pd.read_csv("C:/Users/spink/OneDrive/Desktop/UFC/ufc-master.csv")
+df.head()
+```
+
+```{python}
+df.describe()
+```
+
+```{python}
+df.info()
+```
+
+```{python}
+df.columns
+```
+
+```{python}
+df.isnull().sum()
+```
+
+## Create Target Variable 
+```{python}
+df['RedWins'] = (df['Winner'] == 'Red').astype(int)
+```
+
+```{python}
+df['RedWins'].head()
+```
+
+## Clean data 
+
+```{python}
+pd.set_option('display.max_rows', None)
+```
+```{python}
+df.isnull().sum()
+```
+
+Droping coloms with high NA percentages, most of them have to do with rankings which are arbiatray and likley dont have a significant effect on outcomes
+```{python}
+drop_cols = ['EmptyArena', 'BMatchWCRank', 'RMatchWCRank', 
+             'RWFlyweightRank', 'RWFeatherweightRank', 'RWStrawweightRank',
+             'RWBantamweightRank', 'RHeavyweightRank', 'RLightHeavyweightRank',
+             'RMiddleweightRank', 'RWelterweightRank', 'RLightweightRank',
+             'RFeatherweightRank', 'RBantamweightRank', 'RFlyweightRank',
+             'RPFPRank', 'BWFlyweightRank', 'BWFeatherweightRank',
+             'BWStrawweightRank', 'BWBantamweightRank', 'BHeavyweightRank',
+             'BLightHeavyweightRank', 'BMiddleweightRank', 'BWelterweightRank',
+             'BLightweightRank', 'BFeatherweightRank', 'BBantamweightRank',
+             'BFlyweightRank', 'BPFPRank', 'FinishDetails']
+df = df.drop(columns = drop_cols)
+```
+
+Drop the rows with NA's in coloms with low NA percentages 
+```{python}
+df = df.dropna(subset=['RedOdds', 'BlueOdds', 'RedExpectedValue', 'BlueExpectedValue'])
+```
+
+```{python}
+df['RedOdds'].isnull().sum()
+```
+
+Some coloms dealing wtih fighter stats have NA values because the fighter is new in the UFC
+Making a flag colom to identify new fighters, then subing thier stats with the median value
+Use median because mean is vunerable to outliers and 0 is an outlier itself 
+
+```{python}
+blue_stat_cols = ['BlueAvgSigStrLanded', 'BlueAvgSigStrPct', 'BlueAvgSubAtt', 
+                  'BlueAvgTDLanded', 'BlueAvgTDPct']
+
+red_stat_cols = ['RedAvgSigStrLanded', 'RedAvgSigStrPct', 'RedAvgSubAtt', 
+                 'RedAvgTDLanded', 'RedAvgTDPct']
+```
+
+```{python}
+df['BlueIsDebut'] = df['BlueAvgSigStrLanded'].isnull().astype(int)
+
+df['RedIsDebut'] = df['RedAvgSigStrLanded'].isnull().astype(int)
+```
+
+```{python}
+for col in blue_stat_cols:
+    df[col] = df[col].fillna(df[col].median())
+```
+
+```{python}
+for col in red_stat_cols:
+    df[col] = df[col].fillna(df[col].median())
+```
+
+```{python}
+df[blue_stat_cols].isnull().sum()
+df[red_stat_cols].isnull().sum()
+```
+
+```{python}
+#shows how many new fighters there are 
+df[['BlueIsDebut', 'RedIsDebut']].sum()
+```
+
+fill in the three missing stance vlaue with orthodox, no big deal 
+```{python}
+df['BlueStance'].isnull().sum()
+```
+
+```{python}
+most_common_stance = df['BlueStance'].mode()[0]
+
+df['BlueStance'] = df['BlueStance'].fillna(most_common_stance)
+```
+
+drop specific information about how the fight was won or lost 
+predicting just the winner is less difficulut allbeit lower reward than predicting method of win or which round 
+also easy call to deal with the NA's in these coloms 
+
+```{python}
+drop_cols = ['Finish', 'FinishRound', 
+             'FinishRoundTime', 'TotalFightTimeSecs', 
+             'RedDecOdds', 'BlueDecOdds',
+             'RSubOdds', 'BSubOdds', 'RKOOdds', 'BKOOdds']
+
+df = df.drop(columns = drop_cols)
+```
+
+here we can see we got rid of all the NA's!
+```{python}
+df.isnull().sum()
+```
+
+## Dummfication 
+First I dummfied all the categroical vraibles the number of coefficant jumped from 118 to 4356
+This is a probelem becasue alot that dummfication is not helpful 
+Fighters names were dummifed when they should droped and used to query models 
+Instead of dummifying location and data feature enginnner them to get a new coloum of useful data 
+So I dropped Red gither Blue fighter (fighers names), date, location, and country 
+
+
+```{python}
+df.select_dtypes(include=['object', 'category']).columns
+```
+
+```{python}
+df.select_dtypes(include=['int64', 'float64']).columns
+```
+
+```{python}
+df['Date'] = pd.to_datetime(df['Date'])
+df['Year'] = df['Date'].dt.year
+df['Month'] = df['Date'].dt.month
+df['DaysSinceStart'] = (df['Date'] - df['Date'].min()).dt.days
+df['FightInUSA'] = (df['Country'] == 'USA').astype(int)
+```
+
+```{python}
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+drop_for_model = ['RedFighter', 'BlueFighter', 'Date', 'Location', 'Country']
+
+X = df.drop(['RedWins', 'Winner'] + drop_for_model, axis=1)
+y = df['RedWins']
+
+cat_cols = X.select_dtypes(include='object').columns.tolist()
+num_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
+```
+
+```{python}
+print(cat_cols)
+len(num_cols)
+```
+
+
+## Column Tranformer 
+```{python}
+ct1 = ColumnTransformer(
+    transformers=[
+    ("standardize", StandardScaler(), num_cols),
+    ("dummify", OneHotEncoder(sparse_output=False, handle_unknown='ignore'), cat_cols)
+    ]
+)
+```
+
+
+## Logistic Regression
+```{python}
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+
+pipeline_1 = Pipeline([
+    ("prepocessing", ct1),
+    ("logistic_regression", LogisticRegression(max_iter=1000, class_weight='balanced'))
+])
+```
+
+```{python}
+pipeline_1.fit(X, y)
+```
+
+```{python}
+coef_names = pipeline_1.named_steps["prepocessing"].get_feature_names_out()
+
+coefficients = pd.DataFrame({
+    "Names": coef_names,
+    "Coefficient": pipeline_1.named_steps["logistic_regression"].coef_[0]
+})
+
+coefficients.head(20)
+```
+
+# metrics 
+```{python}
+from sklearn.model_selection import cross_val_score
+scores = cross_val_score(pipeline_1, X, y, cv=5, scoring='accuracy')
+scores
+
+scores.mean()
+```
+
+```{python}
+from sklearn.model_selection import cross_val_predict
+from sklearn.metrics import confusion_matrix, classification_report
+
+y_pred = cross_val_predict(pipeline_1, X, y, cv=5)
+
+print(confusion_matrix(y, y_pred))
+
+print(classification_report(y, y_pred, target_names=['Blue Wins', 'Red Wins']))
+```
+
+```{python}
+roc_auc = cross_val_score(pipeline_1, X, y, cv=5, scoring='roc_auc')
+print(f"ROC-AUC: {roc_auc.mean():.3f}")
+```
+
+found out that the data is unbalence with 58% of wins being red
+so I added class_weight = balance to my pipeline which made the metrics more simalr for red and blue
+Conclusion: Logistic Regression is right approximatly 65% of the time 
+
+## LASSO 
+
+```{python}
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline 
+
+pipeline_lasso = Pipeline([
+    ("prepocessing", ct1),
+    ("lasso", LogisticRegression(max_iter=1000, class_weight='balanced', penalty='l1', solver = 'saga'))
+])
+```
+
+# tunning
+```{python}
+from sklearn.model_selection import GridSearchCV
+
+params = {'lasso__C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+
+lasso_cv = GridSearchCV(pipeline_lasso, params, cv=5, scoring='roc_auc')
+lasso_cv.fit(X, y)
+
+top_params_lasso = lasso_cv.best_params_
+```
+
+```{python}
+top_params_lasso
+```
+
+```{python}
+best_lasso = lasso_cv.best_estimator_
+```
+
+
+need the abs so we get the most infulencal coefficatns regardless of direction
+```{python}
+lasso_coefficients = pd.DataFrame({
+    'Names': coef_names,
+    'Coefficient': best_lasso.named_steps['lasso'].coef_[0]
+})
+
+lasso_coefficients['Abs_coef'] = lasso_coefficients['Coefficient'].abs()
+lasso_coefficients_sorted = lasso_coefficients.sort_values('Abs_coef', ascending=False)
+
+lasso_coefficients_sorted.head(20)
+```
+
+lasso is most valuble to tell what coefficant are the least important 
+```{python}
+dropped = (lasso_coefficients['Coefficient'] == 0).sum()
+kept = (lasso_coefficients['Coefficient'] != 0).sum()
+print(f"Features kept: {kept}")
+print(f"Features dropped: {dropped}")
+```
+
+```{python}
+dropped_features = lasso_coefficients[lasso_coefficients['Coefficient'] == 0]['Names']
+print(dropped_features.tolist())
+```
+
+# metrics
+```{python}
+from sklearn.model_selection import cross_val_predict
+from sklearn.metrics import confusion_matrix, classification_report
+
+y_pred_lasso = cross_val_predict(best_lasso, X, y, cv=5)
+
+print(confusion_matrix(y, y_pred_lasso))
+
+print(classification_report(y, y_pred_lasso, target_names=['Blue Wins', 'Red Wins']))
+```
+
+```{python}
+roc_auc_lasso = cross_val_score(best_lasso, X, y, cv=5, scoring='roc_auc')
+print(f"Lasso ROC-AUC: {roc_auc_lasso.mean():.3f}")
+```
+
+Conclusion: Lasso slighlty improved metrics while dropping half the explatory variables, which shows that those dropped vraibles were noise 
+Drop them? No, becaue Lasso captures linear effects, non linear models might find value in the one's lasso disregraded 
+
+## Random Forrest 
+
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+
+pipeline_rf = Pipeline([
+    ('preprocessing', ct1),
+    ('rf', RandomForestClassifier(class_weight='balanced', random_state=42))
+])
+```
+
+# tunning 
+Used two hyperparameters to balance speed and accuracy, more hyperperamters increases accuracy but slows speed
+```{python}
+from sklearn.model_selection import GridSearchCV
+
+params = {
+    'rf__n_estimators': [100, 200],
+    'rf__max_depth': [10 , 20, None]
+}
+
+rf_cv = GridSearchCV(pipeline_rf, params, cv=5, scoring='roc_auc')
+rf_cv.fit(X, y)
+
+print(f"Best params: {rf_cv.best_params_}")
+```
+
+# coefficants 
+dont need an abslute row because feature_importances_ are all protive with higher being more helpful 
+```{python}
+best_rf = rf_cv.best_estimator_
+
+feature_names = best_rf.named_steps['preprocessing'].get_feature_names_out()
+
+rf_importance = pd.DataFrame({
+    'Names': feature_names,
+    'Importance': best_rf.named_steps['rf'].feature_importances_
+})
+
+rf_importance_sorted = rf_importance.sort_values('Importance', ascending=False)
+
+rf_importance_sorted.head(20)
+```
+
+
+# metrics
+```{python}
+from sklearn.model_selection import cross_val_score
+
+roc_auc_rf = cross_val_score(best_rf, X, y, cv=5, scoring='roc_auc')
+print(f"Random Forest ROC-AUC: {roc_auc_rf.mean():.3f}")
+```
+
+```{python}
+bal_acc_rf = cross_val_score(best_rf, X, y, cv=5, scoring='balanced_accuracy')
+print(f"Balanced Accuracy: {bal_acc_rf.mean():.3f}")
+```
+
+```{python}
+from sklearn.model_selection import cross_val_predict
+from sklearn.metrics import confusion_matrix, classification_report
+
+y_pred_rf = cross_val_predict(best_rf, X, y, cv=5)
+
+print(confusion_matrix(y, y_pred_rf))
+print(classification_report(y, y_pred_rf, target_names=['Blue Wins', 'Red Wins']))
+```
+
+Conclusion: preforms better than logistic regression but not better than lasso
+next I'll try running the random forest using only the coloums with coefficants not equaling 0 
+
+## Reduced Random Forrest 
+
+Find which specific variables Lasso kept 
+```{python}
+kept_features = lasso_coefficients[lasso_coefficients['Coefficient'] != 0]['Names'].tolist()
+print(f"Features kept: {len(kept_features)}")
+```
+
+Use the variables that ketp 
+```{python}
+ct1.fit(X)
+X_transformed = ct1.transform(X)
+feature_names = ct1.get_feature_names_out()
+
+X_transformed_df = pd.DataFrame(X_transformed, columns=feature_names)
+X_lasso_features = X_transformed_df[kept_features]
+```
+
+adding the two extra hyper peramitors improved roc-auc from 0.711 to 0.713
+playing with the range of hyperparameters does help mutch becuase there is an optimal region not an optimal score
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+
+params = {
+    'n_estimators': [300, 400, 500],
+    'max_depth': [5, 6, 7],
+    'min_samples_split': [ 10, 15, 20],
+    'min_samples_leaf': [4, 5, 6]
+}
+
+rf_lasso = RandomForestClassifier(class_weight='balanced', random_state=42)
+rf_lasso_cv = GridSearchCV(rf_lasso, params, cv=5, scoring='roc_auc', verbose=1)
+rf_lasso_cv.fit(X_lasso_features, y)
+
+print(f"Best params: {rf_lasso_cv.best_params_}")
+print(f"Best ROC-AUC: {rf_lasso_cv.best_score_:.3f}")
+```
+
+Evaluate Best Model 
+```{python}
+best_rf_lasso = rf_lasso_cv.best_estimator_
+
+y_pred_rf_lasso = cross_val_predict(best_rf_lasso, X_lasso_features, y, cv=5)
+
+print(confusion_matrix(y, y_pred_rf_lasso))
+print(classification_report(y, y_pred_rf_lasso, target_names=['Blue Wins', 'Red Wins']))
+```
+
+Balanced Accuracy 
+```{python}
+bal_acc_rf_lasso = cross_val_score(best_rf_lasso, X_lasso_features, y, cv=5, scoring='balanced_accuracy')
+print(f"Balanced Accuracy: {bal_acc_rf_lasso.mean():.3f}")
+```
+
+## XGBoost
+
+```{python}
+pip install xgboost
+```
+
+```{python}
+from xgboost import XGBClassifier
+from sklearn.model_selection import GridSearchCV
+
+# Calculate scale_pos_weight for imbalanced data
+scale = (y == 0).sum() / (y == 1).sum()  # ratio of Blue to Red wins
+
+xgb = XGBClassifier(
+    random_state=42,
+    eval_metric='logloss',
+    scale_pos_weight=scale
+)
+
+params = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [3, 5, 7],
+    'learning_rate': [0.01, 0.1, 0.2]
+}
+
+xgb_cv = GridSearchCV(xgb, params, cv=5, scoring='roc_auc', verbose=1)
+xgb_cv.fit(X_lasso_features, y)
+
+print(f"Best params: {xgb_cv.best_params_}")
+print(f"Best ROC-AUC: {xgb_cv.best_score_:.3f}")
+```
+
+```{python}
+# Evaluate best model
+best_xgb = xgb_cv.best_estimator_
+
+y_pred_xgb = cross_val_predict(best_xgb, X_lasso_features, y, cv=5)
+
+print(confusion_matrix(y, y_pred_xgb))
+print(classification_report(y, y_pred_xgb, target_names=['Blue Wins', 'Red Wins']))
+```
+
+Accuracy
+```{python}
+bal_acc_xgb = cross_val_score(best_xgb, X_lasso_features, y, cv=5, scoring='balanced_accuracy')
+print(f"Balanced Accuracy: {bal_acc_xgb.mean():.3f}")
+```
+
+## Test 
+Lasso was my best model so I'm using that. 
+
+Problem 1: Fighter stats are split between Red/Blue columns based on corner assignment, 
+           not the fighter themselves.
+
+Problem 2: Many variables need updating for a new fight:
+           - Differential columns (recalculated from fighter stats)
+           - Fight context (Year, Month, TitleBout, etc.)
+
+Lasso uses 49 explanatory varaibles
+```{python}
+dropped = (lasso_coefficients['Coefficient'] == 0).sum()
+kept = (lasso_coefficients['Coefficient'] != 0).sum()
+
+print(f"Features kept: {kept}")
+print(f"Features dropped: {dropped}")
+```
+
+Specificly these ones 
+```{python}
+for f in kept_features:
+    print(f)
+```
+
+28 of them are red and blue varaibles and thus affected by problem 1.
+7 are differential and 11 need manual impput so affected by problem 2.
+
+Put fighters stats into the correct corner 
+```{python}
+# Gaethje's most recent fight (he was Red corner)
+gaethje = df[df['RedFighter'] == 'Justin Gaethje'].sort_values('Date').tail(1)
+
+# Pimblett's most recent fight (he was Red corner)
+pimblett = df[df['RedFighter'] == 'Paddy Pimblett'].sort_values('Date').tail(1)
+
+# Start with Gaethje's row (his Red stats are already correct)
+prediction_row = gaethje[X.columns].copy()
+
+# Swap Pimblett's Red stats into Blue columns
+blue_cols = [c for c in X.columns if c.startswith('Blue') and c.replace('Blue', 'Red') in X.columns]
+for col in blue_cols:
+    red_col = col.replace('Blue', 'Red')
+    prediction_row[col] = pimblett[red_col].values[0]
+```
+
+Calculate vlaues of the differential columns to be fighter specific 
+```{python}
+prediction_row['WinStreakDif'] = prediction_row['RedCurrentWinStreak'] - prediction_row['BlueCurrentWinStreak']
+prediction_row['LongestWinStreakDif'] = prediction_row['RedLongestWinStreak'] - prediction_row['BlueLongestWinStreak']
+prediction_row['KODif'] = prediction_row['RedWinsByKO'] - prediction_row['BlueWinsByKO']
+prediction_row['SubDif'] = prediction_row['RedWinsBySubmission'] - prediction_row['BlueWinsBySubmission']
+prediction_row['ReachDif'] = prediction_row['RedReachCms'] - prediction_row['BlueReachCms']
+prediction_row['AvgSubAttDif'] = prediction_row['RedAvgSubAtt'] - prediction_row['BlueAvgSubAtt']
+prediction_row['AvgTDDif'] = prediction_row['RedAvgTDLanded'] - prediction_row['BlueAvgTDLanded']
+```
+
+Update the vraibles that are the context of the specific fight 
+```{python}
+prediction_row['RedExpectedValue'] = 180.0              # Gaethje +180 (underdog)
+prediction_row['BlueExpectedValue'] = 100 / 218 * 100   # Pimblett -218 (favorite)
+prediction_row['NumberOfRounds'] = 5
+prediction_row['WeightClass'] = 'Lightweight'
+prediction_row['Gender'] = 'MALE'
+prediction_row['BetterRank'] = 'Red'
+prediction_row['DaysSinceStart'] = (pd.Timestamp('2025-01-23') - df['Date'].min()).days
+prediction_row['BlueIsDebut'] = 0
+prediction_row['RedIsDebut'] = 0
+```
+
+Run Lasso 
+```{python}
+proba = best_lasso.predict_proba(prediction_row)
+print(f"Gaethje: {proba[0][1]*100:.1f}%")
+print(f"Pimblett: {proba[0][0]*100:.1f}%")
+```
